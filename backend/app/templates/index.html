@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treasure - Transactions</title>
+</head>
+<body>
+    <h1>Treasure Transactions</h1>
+    <button id="linkButton">Link Account</button>
+    <div id="transactions"></div>
+
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+        const API_URL = '';  // Empty string since we're serving from the same origin
+        let accessToken = '';
+
+        document.getElementById('linkButton').onclick = function() {
+            console.log('Link button clicked');
+            fetch(`${API_URL}/api/plaid/create_link_token`, { 
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Link token created:', data);
+                    const handler = Plaid.create({
+                        token: data.link_token,
+                        onSuccess: (public_token, metadata) => {
+                            console.log('Plaid Link success');
+                            // Exchange public token for access token
+                            fetch(`${API_URL}/api/plaid/set_access_token`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ public_token: public_token }),
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('Access token received:', data);
+                                accessToken = data.access_token;
+                                fetchTransactions();
+                            })
+                            .catch(error => console.error('Error setting access token:', error));
+                        },
+                        onExit: (err, metadata) => {
+                            console.log('Plaid Link exited', err, metadata);
+                        },
+                    });
+                    handler.open();
+                })
+                .catch(error => console.error('Error creating link token:', error));
+        };
+
+        function fetchTransactions() {
+            console.log('Fetching transactions');
+            const startDate = '2023-01-01';
+            const endDate = '2023-07-20';
+            fetch(`${API_URL}/api/plaid/transactions?access_token=${accessToken}&start_date=${startDate}&end_date=${endDate}`)
+                .then(response => response.json())
+                .then(transactions => {
+                    console.log('Transactions received:', transactions);
+                    const transactionsDiv = document.getElementById('transactions');
+                    transactionsDiv.innerHTML = '<h2>Transactions:</h2>';
+                    transactions.forEach(transaction => {
+                        transactionsDiv.innerHTML += `
+                            <p>
+                                ${transaction.date} - ${transaction.name}: $${transaction.amount}
+                            </p>
+                        `;
+                    });
+                })
+                .catch(error => console.error('Error fetching transactions:', error));
+        }
+    </script>
+</body>
+</html>
